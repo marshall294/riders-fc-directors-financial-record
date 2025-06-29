@@ -63,6 +63,11 @@
     <div class="card-body" id="overallTotals"></div>
   </div>
 
+  <div class="card">
+    <div class="card-header">📊 Contribution Percentages</div>
+    <div class="card-body" id="percentagesSection"></div>
+  </div>
+
   <script>
     const firebaseConfig = {
       apiKey: "AIzaSyAFsHg9fK6IDnHbuxmBleEfIIfVGsuLDik",
@@ -91,10 +96,13 @@
     function renderViewer(users, contributions) {
       const container = document.getElementById('viewerContent');
       const totalsDiv = document.getElementById('overallTotals');
+      const percentageDiv = document.getElementById('percentagesSection');
       container.innerHTML = '';
       totalsDiv.innerHTML = '';
+      percentageDiv.innerHTML = '';
 
       let grandExpected = 0, grandPaid = 0;
+      const userContributions = [];
 
       users.forEach(user => {
         let totalPaid = 0, totalExpected = 0;
@@ -112,8 +120,9 @@
 
         grandExpected += totalExpected;
         grandPaid += totalPaid;
-
         const balance = totalExpected - totalPaid;
+
+        userContributions.push({ name: user.name, paid: totalPaid });
 
         container.innerHTML += `
           <div class="card">
@@ -135,6 +144,18 @@
         <p><strong>Total Expected Payment:</strong> ₦${grandExpected}</p>
         <p><strong>Total Contributed Payment:</strong> ₦${grandPaid}</p>
         <p><strong>Total Balance to be Paid:</strong> ₦${totalBalance}</p>`;
+
+      // Correct Percentage Calculation
+      userContributions.forEach(u => {
+        u.percentage = grandPaid > 0 ? ((u.paid / grandPaid) * 100).toFixed(2) : "0.00";
+      });
+
+      userContributions.sort((a, b) => b.paid - a.paid);
+      percentageDiv.innerHTML = '<ul class="list-group">' + userContributions.map(p => `
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          ${p.name}
+          <span class="badge bg-primary rounded-pill">${p.percentage}%</span>
+        </li>`).join('') + '</ul>';
     }
 
     function toggleBreakdown(id) {
