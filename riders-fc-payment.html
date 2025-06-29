@@ -1,0 +1,205 @@
+<!-- admin.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Riders FC Directors Financial Report - Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+  <style>
+    body { background-color: #f0f2f5; font-family: 'Segoe UI', sans-serif; }
+    .card { margin-bottom: 20px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.05); }
+    .contribution-toggle { cursor: pointer; color: #0d6efd; text-decoration: underline; }
+    .card h4 { color: #333; }
+    .form-control { border-radius: 8px; }
+    .btn { border-radius: 8px; }
+    .highlight { font-weight: bold; }
+  </style>
+</head>
+<body>
+<div class="container py-4">
+  <h2 class="text-center mb-4">💼 Riders FC Directors Financial Report - Admin</h2>
+
+  <div class="card p-4">
+    <h4>Add New User</h4>
+    <input type="text" id="newUserName" class="form-control mb-3" placeholder="Enter Full Name">
+    <button class="btn btn-primary w-100" onclick="addUser()">Add User</button>
+  </div>
+
+  <div class="card p-4">
+    <h4>Create Contribution</h4>
+    <input type="text" id="contributionName" class="form-control mb-3" placeholder="Contribution Name">
+    <input type="number" id="expectedAmount" class="form-control mb-3" placeholder="Expected Amount for Each Director (₦)">
+    <div id="userContributions" class="mb-3"></div>
+    <button class="btn btn-success w-100" onclick="createContribution()">Save Contribution</button>
+  </div>
+
+  <div class="card p-4">
+    <h4>Edit Existing Contributions</h4>
+    <select class="form-select mb-3" id="contributionSelector" onchange="renderEditableContribution(this.value)">
+      <option value="">Select a Contribution to Edit</option>
+    </select>
+    <div id="existingContributions" class="mb-3"></div>
+  </div>
+
+  <div class="card p-4">
+    <h4>All Users Summary</h4>
+    <div id="userList"></div>
+  </div>
+</div>
+
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyAFsHg9fK6IDnHbuxmBleEfIIfVGsuLDik",
+    authDomain: "profile-b825d.firebaseapp.com",
+    projectId: "profile-b825d",
+    storageBucket: "profile-b825d.firebasestorage.app",
+    messagingSenderId: "925276859161",
+    appId: "1:925276859161:web:194c60f6dbd9f1ef8bf388"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+
+  let userList = [];
+  let contributionsMap = {}; // map of contribution id to data
+
+  async function addUser() {
+    const name = document.getElementById('newUserName').value.trim();
+    if (name) {
+      await db.collection('users').add({ name });
+      document.getElementById('newUserName').value = '';
+      loadUsers();
+    }
+  }
+
+  async function createContribution() {
+    const name = document.getElementById('contributionName').value.trim();
+    const expected = parseFloat(document.getElementById('expectedAmount').value);
+    const contributionDetails = [];
+
+    if (!name || isNaN(expected) || expected <= 0) return alert('Enter valid contribution name and expected amount.');
+
+    userList.forEach(user => {
+      const input = document.getElementById(`contrib-${user.id}`);
+      const amount = parseFloat(input.value);
+      contributionDetails.push({ userId: user.id, name: user.name, amount: isNaN(amount) ? 0 : amount });
+    });
+
+    await db.collection('contributions').add({ name, expected, details: contributionDetails, createdAt: new Date() });
+    document.getElementById('contributionName').value = '';
+    document.getElementById('expectedAmount').value = '';
+    renderContributionInputs();
+    loadContributions();
+  }
+
+  async function updateContributionAmount(contributionId, userId, newAmount) {
+    const docRef = db.collection('contributions').doc(contributionId);
+    const doc = await docRef.get();
+    if (!doc.exists) return;
+
+    const data = doc.data();
+    const updatedDetails = data.details.map(d => d.userId === userId ? { ...d, amount: parseFloat(newAmount) || 0 } : d);
+    await docRef.update({ details: updatedDetails });
+    loadContributions();
+  }
+
+  async function loadUsers() {
+    const snapshot = await db.collection('users').get();
+    userList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    renderContributionInputs();
+    loadContributions();
+  }
+
+  async function loadContributions() {
+    const snapshot = await db.collection('contributions').orderBy('createdAt', 'asc').get();
+    const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    contributionsMap = {};
+    list.forEach(c => contributionsMap[c.id] = c);
+    renderContributionSelector(list);
+    renderUsers(list);
+  }
+
+  function renderContributionSelector(contributions) {
+    const select = document.getElementById('contributionSelector');
+    select.innerHTML = '<option value="">Select a Contribution to Edit</option>';
+    contributions.forEach(c => {
+      select.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+    });
+  }
+
+  function renderEditableContribution(id) {
+    const div = document.getElementById('existingContributions');
+    div.innerHTML = '';
+    const c = contributionsMap[id];
+    if (!c) return;
+
+    div.innerHTML += `<div class="mb-3"><strong>${c.name}</strong> - Expected: ₦${c.expected}</div>`;
+    c.details.forEach(d => {
+      div.innerHTML += `
+        <div class="d-flex align-items-center mb-2">
+          <div class="me-2" style="width: 150px">${d.name}</div>
+          <input type="number" class="form-control me-2" value="${d.amount}" style="max-width: 150px" onchange="updateContributionAmount('${id}', '${d.userId}', this.value)">
+        </div>`;
+    });
+  }
+
+  function renderContributionInputs() {
+    const div = document.getElementById('userContributions');
+    div.innerHTML = '';
+    userList.forEach(user => {
+      div.innerHTML += `
+        <div class="mb-2">
+          <label><strong>${user.name}</strong> (₦):</label>
+          <input type="number" id="contrib-${user.id}" class="form-control" placeholder="Amount paid by ${user.name}">
+        </div>`;
+    });
+  }
+
+  function renderUsers(contributions) {
+    const div = document.getElementById('userList');
+    div.innerHTML = '';
+
+    userList.forEach(user => {
+      const uid = user.id;
+      let totalPaid = 0;
+      let totalExpected = 0;
+      const breakdown = [];
+
+      contributions.forEach(c => {
+        const match = c.details.find(d => d.userId === uid);
+        const paid = match ? match.amount : 0;
+        totalPaid += paid;
+        totalExpected += c.expected;
+
+        const status = paid >= c.expected
+          ? `<span class='text-success'>₦${paid}</span>`
+          : `<span class='text-danger'>₦${paid} / ₦${c.expected}</span>`;
+
+        breakdown.push(`<li><strong>${c.name}</strong>: ${status}</li>`);
+      });
+
+      div.innerHTML += `
+        <div class="border rounded p-3 mb-3 bg-white">
+          <strong class="fs-5">${user.name}</strong><br>
+          <div>Expected Total: <strong>₦${totalExpected}</strong></div>
+          <div>Total Contributed: <strong>₦${totalPaid}</strong></div>
+          <div class="mt-2"><span class="contribution-toggle" onclick="toggleDetails('${uid}')">Toggle Details</span></div>
+          <div id="details-${uid}" style="display:none;" class="mt-2">
+            <ul>${breakdown.join('')}</ul>
+          </div>
+        </div>`;
+    });
+  }
+
+  function toggleDetails(id) {
+    const el = document.getElementById(`details-${id}`);
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  }
+
+  window.onload = loadUsers;
+</script>
+</body>
+</html>
